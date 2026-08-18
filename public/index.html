@@ -36,7 +36,7 @@ let allCategories = [];
 
 async function loadCategories() {
   try {
-    allCategories = await api('/products/categories');
+    allCategories = await apiFetch('/products/categories');
     const sel = document.getElementById('categorySelect');
     allCategories.forEach(c => {
       const opt = document.createElement('option');
@@ -61,7 +61,7 @@ async function loadProducts() {
   if (category) params.set('category', category);
 
   try {
-    const products = await api(`/products?${params.toString()}`);
+    const products = await apiFetch(`/products?${params.toString()}`);
     if (products.length === 0) {
       grid.innerHTML = '<div class="empty-state">No products found.</div>';
       return;
@@ -74,7 +74,7 @@ async function loadProducts() {
           <h3>${escapeHtml(p.name)}</h3>
           <p class="desc">${escapeHtml(p.description)}</p>
           <div class="price-row">
-            <span class="price">${money(p.price)}</span>
+            <span class="price">${formatPrice(p.price)}</span>
             <span class="stock ${p.stock <= 5 ? 'low' : ''}">${p.stock > 0 ? p.stock + ' in stock' : 'Out of stock'}</span>
           </div>
           <div class="card-actions">
@@ -99,7 +99,7 @@ async function addToCart(productId) {
     return;
   }
   try {
-    await api('/cart', { method: 'POST', body: JSON.stringify({ product_id: productId, quantity: 1 }) });
+    await apiFetch('/cart', { method: 'POST', body: JSON.stringify({ product_id: productId, quantity: 1 }) });
     showAlert('Added to cart!');
     renderNavbar();
   } catch (e) {
@@ -114,7 +114,7 @@ async function buyNow(productId) {
   }
   try {
     // Orders just this one item directly — does not touch the cart
-    const order = await api('/orders/buy-now', { method: 'POST', body: JSON.stringify({ product_id: productId, quantity: 1 }) });
+    const order = await apiFetch('/orders/buy-now', { method: 'POST', body: JSON.stringify({ product_id: productId, quantity: 1 }) });
     showAlert(`Order #${order.id} placed successfully!`);
     setTimeout(() => { window.location.href = '/orders.html'; }, 1200);
   } catch (e) {
