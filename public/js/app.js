@@ -17,7 +17,7 @@ function clearSession() {
 function isLoggedIn() { return !!getToken(); }
 function isAdmin() { const u = getUser(); return u && u.role === 'admin'; }
 
-async function api(path, options = {}) {
+async function apiFetch(path, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
   const token = getToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -30,7 +30,7 @@ async function api(path, options = {}) {
   return data;
 }
 
-function money(n) { return `₹${Number(n).toFixed(2)}`; }
+function formatPrice(n) { return `₹${Number(n).toFixed(2)}`; }
 
 function escapeHtml(str) {
   if (str === null || str === undefined) return '';
@@ -47,7 +47,7 @@ async function renderNavbar() {
   let cartCount = 0;
   if (isLoggedIn()) {
     try {
-      const cart = await api('/cart');
+      const cart = await apiFetch('/cart');
       cartCount = cart.reduce((s, i) => s + i.quantity, 0);
     } catch (e) { /* ignore */ }
   }
