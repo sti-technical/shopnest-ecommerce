@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Your Cart — ShopNest</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar" id="navbar"></nav>
+
+<div class="container" style="max-width:760px; padding-top: 24px;">
+  <h2 class="section-title" style="margin-top:12px;">Your Cart</h2>
+  <div id="cartMsg"></div>
+  <div id="cartItems"></div>
+
+  <div id="cartSummary" style="display:none; margin-top:20px;">
+    <div class="cart-summary">
+      <div class="summary-row"><span>Subtotal</span><span id="subtotal"></span></div>
+      <div class="summary-row"><span>Delivery</span><span>Free</span></div>
+      <div class="summary-row summary-total"><span>Total</span><span id="totalAmt"></span></div>
+      <div class="field" style="margin-top:16px;">
+        <label for="address">Delivery Address</label>
+        <textarea id="address" rows="3" placeholder="Enter your full address"></textarea>
+      </div>
+      <button class="btn btn-primary btn-block" id="checkoutBtn" onclick="checkout()">Place Order</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+<script>
+if (!requireLogin()) { /* redirected */ }
+
+renderNavbar('cart');
+
+async function loadCart() {
+  const itemsEl = document.getElementById('cartItems');
+  try {
+    const data = await apiFetch('/cart');
+    if (data.items.length === 0) {
+      itemsEl.innerHTML = `<div class="empty-state">Your cart is empty. <br><a href="index.html" class="btn btn-primary" style="margin-top:12px;">Browse Products</a></div>`;
+      document.getElementById('cartSummary').style.display = 'none';
+      return;
+    }
+
+    itemsEl.innerHTML = data.items.map(item => `
+      <div class="cart-row" data-id="${item.cart_item_id}">
+        <img src="${item.image}" alt="${escapeHtml(item.name)}">
+        <div class="info">
+          <h4>${escapeHtml(item.name)}</h4>
+          <div style="color:var(--ink-soft); font-size:13px;">${formatPrice(item.price)} each</div>
+        </div>
+        <div class="qty-control">
+          <button onclick="changeQty(${item.cart_item_id}, ${item.quantity - 1})">−</button>
+          <span>${item.quantity}</span>
+          <button onclick="changeQty(${item.cart_item_id}, ${item.quantity + 1})">+</button>
+        </div>
+        <div style="width:90px; text-align:right; font-weight:600;">${formatPrice(item.price * item.quantity)}</div>
+        <button class="btn btn-outline btn-sm" onclick="removeItem(${item.cart_item_id})">Remove</button>
+      </div>
+    `).join('');
+
+    document.getElementById('subtotal').textContent = formatPrice(data.total);
+    document.getElementById('totalAmt').textContent = formatPrice(data.total);
+    document.getElementById('cartSummary').style.display = 'block';
+  } catch (e) {
+    itemsEl.innerHTML = `<p class="form-msg error">Failed to load cart.</p>`;
+  }
+}
+
+async function changeQty(cartItemId, newQty) {
+  try {
+    await apiFetch(`/cart/${cartItemId}`, { method: 'PUT', body: JSON.stringify({ quantity: newQty }) });
+    loadCart();
+    refreshCartCount();
+  } catch (e) { alert(e.message); }
+}
+
+async function removeItem(cartItemId) {
+  try {
+    await apiFetch(`/cart/${cartItemId}`, { method: 'DELETE' });
+    loadCart();
+    refreshCartCount();
+  } catch (e) { alert(e.message); }
+}
+
+async function checkout() {
+  const btn = document.getElementById('checkoutBtn');
+  const address = document.getElementById('address').value.trim();
+  const msgBox = document.getElementById('cartMsg');
+  if (!address) {
+    msgBox.innerHTML = `<div class="form-msg error">Please enter a delivery address.</div>`;
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Placing order...';
+  try {
+    const data = await apiFetch('/orders/checkout', { method: 'POST', body: JSON.stringify({ address }) });
+    window.location.href = 'orders.html?placed=' + data.order_id;
+  } catch (e) {
+    msgBox.innerHTML = `<div class="form-msg error">${escapeHtml(e.message)}</div>`;
+    btn.disabled = false;
+    btn.textContent = 'Place Order';
+  }
+}
+
+loadCart();
+</script>
+</body>
+</html>

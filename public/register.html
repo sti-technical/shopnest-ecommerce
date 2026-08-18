@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign Up — ShopNest</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar" id="navbar"></nav>
+
+<div class="auth-wrap">
+  <h2>Create your account</h2>
+  <div id="msgBox"></div>
+  <form id="registerForm">
+    <div class="field">
+      <label for="name">Full Name</label>
+      <input type="text" id="name" required placeholder="Your name">
+    </div>
+    <div class="field">
+      <label for="email">Email</label>
+      <input type="email" id="email" required placeholder="you@example.com">
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input type="password" id="password" required placeholder="At least 6 characters" minlength="6">
+    </div>
+    <button type="submit" class="btn btn-primary btn-block" id="submitBtn">Sign Up</button>
+  </form>
+  <p class="auth-switch">Already have an account? <a href="login.html">Login</a></p>
+</div>
+
+<script src="js/app.js"></script>
+<script>
+renderNavbar('');
+
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const msgBox = document.getElementById('msgBox');
+  const btn = document.getElementById('submitBtn');
+  msgBox.innerHTML = '';
+  btn.disabled = true;
+  btn.textContent = 'Creating account...';
+
+  try {
+    const name = document.getElementById('name').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    const data = await apiFetch('/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password }) });
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    window.location.href = 'index.html';
+  } catch (err) {
+    msgBox.innerHTML = `<div class="form-msg error">${escapeHtml(err.message)}</div>`;
+    btn.disabled = false;
+    btn.textContent = 'Sign Up';
+  }
+});
+</script>
+</body>
+</html>

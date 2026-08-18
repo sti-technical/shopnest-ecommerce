@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ShopNest — Shop Smart, Live Better</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar" id="navbar"></nav>
+
+<section class="hero">
+  <div class="container">
+    <h1>Everything you need, delivered to your door.</h1>
+    <p>Browse handpicked electronics, footwear, home essentials and more — all in one place.</p>
+    <div class="search-bar">
+      <input type="text" id="searchInput" placeholder="Search for products...">
+      <button class="btn btn-primary" onclick="doSearch()">Search</button>
+    </div>
+  </div>
+</section>
+
+<div class="container">
+  <div class="chips" id="categoryChips"></div>
+  <h2 class="section-title">Products</h2>
+  <div class="grid" id="productGrid">
+    <p style="color:var(--ink-soft)">Loading products...</p>
+  </div>
+</div>
+
+<footer>Built as a college mini-project — ShopNest &copy; 2026</footer>
+
+<script src="js/app.js"></script>
+<script>
+let activeCategory = '';
+
+async function loadCategories() {
+  try {
+    const cats = await apiFetch('/products/categories');
+    const el = document.getElementById('categoryChips');
+    el.innerHTML = `<div class="chip active" data-cat="" onclick="filterCategory('')">All</div>` +
+      cats.map(c => `<div class="chip" data-cat="${escapeHtml(c)}" onclick="filterCategory('${escapeHtml(c)}')">${escapeHtml(c)}</div>`).join('');
+  } catch (e) { console.error(e); }
+}
+
+function filterCategory(cat) {
+  activeCategory = cat;
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.cat === cat));
+  loadProducts();
+}
+
+function doSearch() {
+  loadProducts();
+}
+
+document.getElementById('searchInput')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') doSearch();
+});
+
+async function loadProducts() {
+  const grid = document.getElementById('productGrid');
+  grid.innerHTML = `<p style="color:var(--ink-soft)">Loading products...</p>`;
+  try {
+    const search = document.getElementById('searchInput').value.trim();
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (activeCategory) params.set('category', activeCategory);
+
+    const products = await apiFetch('/products?' + params.toString());
+    if (products.length === 0) {
+      grid.innerHTML = `<div class="empty-state">No products found.</div>`;
+      return;
+    }
+    grid.innerHTML = products.map(p => `
+      <div class="card">
+        <img src="${p.image}" alt="${escapeHtml(p.name)}" loading="lazy">
+        <div class="card-body">
+          <span class="card-category">${escapeHtml(p.category)}</span>
+          <h3 class="card-title">${escapeHtml(p.name)}</h3>
+          <p class="card-desc">${escapeHtml(p.description)}</p>
+          <div class="card-footer">
+            <span class="price">${formatPrice(p.price)}</span>
+            ${p.stock <= 5 ? `<span class="stock-low">${p.stock === 0 ? 'Out of stock' : 'Only ' + p.stock + ' left'}</span>` : ''}
+          </div>
+          <button class="btn btn-primary btn-block" ${p.stock === 0 ? 'disabled' : ''} onclick="addToCart(${p.id}, this)">
+            ${p.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
+          </button>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    grid.innerHTML = `<p class="form-msg error">Failed to load products.</p>`;
+  }
+}
+
+async function addToCart(productId, btn) {
+  if (!getToken()) { window.location.href = 'login.html'; return; }
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'Adding...';
+  try {
+    await apiFetch('/cart', { method: 'POST', body: JSON.stringify({ product_id: productId, quantity: 1 }) });
+    btn.textContent = 'Added ✓';
+    refreshCartCount();
+    setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1200);
+  } catch (e) {
+    alert(e.message);
+    btn.textContent = original;
+    btn.disabled = false;
+  }
+}
+
+renderNavbar('home');
+loadCategories();
+loadProducts();
+</script>
+</body>
+</html>

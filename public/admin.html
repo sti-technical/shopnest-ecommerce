@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Dashboard — ShopNest</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar" id="navbar"></nav>
+
+<div class="container" style="padding-top:24px;">
+  <h2 class="section-title" style="margin-top:12px;">Admin Dashboard</h2>
+
+  <div class="chips">
+    <div class="chip active" data-tab="products" onclick="switchTab('products')">Products</div>
+    <div class="chip" data-tab="orders" onclick="switchTab('orders')">Orders</div>
+  </div>
+
+  <!-- PRODUCTS TAB -->
+  <div id="productsTab" class="admin-grid" style="margin-top:20px;">
+    <div class="admin-panel">
+      <h3 id="formTitle" style="margin-top:0;">Add New Product</h3>
+      <div id="productMsg"></div>
+      <form id="productForm">
+        <input type="hidden" id="productId">
+        <div class="field"><label>Name</label><input type="text" id="pName" required></div>
+        <div class="field"><label>Description</label><textarea id="pDesc" rows="2"></textarea></div>
+        <div class="field"><label>Price (₹)</label><input type="number" id="pPrice" min="0" step="0.01" required></div>
+        <div class="field"><label>Stock</label><input type="number" id="pStock" min="0" required></div>
+        <div class="field"><label>Category</label><input type="text" id="pCategory" placeholder="e.g. Electronics"></div>
+        <div class="field"><label>Image URL</label><input type="text" id="pImage" placeholder="https://..."></div>
+        <button type="submit" class="btn btn-primary btn-block" id="productSubmitBtn">Add Product</button>
+        <button type="button" class="btn btn-outline btn-block" style="margin-top:8px; display:none;" id="cancelEditBtn" onclick="resetForm()">Cancel Edit</button>
+      </form>
+    </div>
+
+    <div>
+      <table class="admin-table">
+        <thead><tr><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th>Actions</th></tr></thead>
+        <tbody id="productTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ORDERS TAB -->
+  <div id="ordersTab" style="display:none; margin-top:20px;">
+    <table class="admin-table">
+      <thead><tr><th>Order ID</th><th>Customer</th><th>Total</th><th>Status</th><th>Date</th><th>Update</th></tr></thead>
+      <tbody id="orderTableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+<script>
+if (!requireLogin()) { /* redirected */ }
+if (!requireAdmin()) { /* redirected */ }
+renderNavbar('admin');
+
+function switchTab(tab) {
+  document.querySelectorAll('.chip[data-tab]').forEach(c => c.classList.toggle('active', c.dataset.tab === tab));
+  document.getElementById('productsTab').style.display = tab === 'products' ? 'grid' : 'none';
+  document.getElementById('ordersTab').style.display = tab === 'orders' ? 'block' : 'none';
+  if (tab === 'orders') loadOrders();
+}
+
+// ---------- PRODUCTS ----------
+async function loadProducts() {
+  const tbody = document.getElementById('productTableBody');
+  try {
+    const products = await apiFetch('/products');
+    tbody.innerHTML = products.map(p => `
+      <tr>
+        <td>${escapeHtml(p.name)}</td>
+        <td>${escapeHtml(p.category)}</td>
+        <td>${formatPrice(p.price)}</td>
+        <td>${p.stock}</td>
+        <td>
+          <button class="btn btn-outline btn-sm" onclick='editProduct(${JSON.stringify(p)})'>Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.id})">Delete</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="5">Failed to load products.</td></tr>`;
+  }
+}
+
+function editProduct(p) {
+  document.getElementById('formTitle').textContent = 'Edit Product';
+  document.getElementById('productId').value = p.id;
+  document.getElementById('pName').value = p.name;
+  document.getElementById('pDesc').value = p.description;
+  document.getElementById('pPrice').value = p.price;
+  document.getElementById('pStock').value = p.stock;
+  document.getElementById('pCategory').value = p.category;
+  document.getElementById('pImage').value = p.image;
+  document.getElementById('productSubmitBtn').textContent = 'Update Product';
+  document.getElementById('cancelEditBtn').style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function resetForm() {
+  document.getElementById('productForm').reset();
+  document.getElementById('productId').value = '';
+  document.getElementById('formTitle').textContent = 'Add New Product';
+  document.getElementById('productSubmitBtn').textContent = 'Add Product';
+  document.getElementById('cancelEditBtn').style.display = 'none';
+}
+
+document.getElementById('productForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const msgBox = document.getElementById('productMsg');
+  msgBox.innerHTML = '';
+  const id = document.getElementById('productId').value;
+  const payload = {
+    name: document.getElementById('pName').value.trim(),
+    description: document.getElementById('pDesc').value.trim(),
+    price: parseFloat(document.getElementById('pPrice').value),
+    stock: parseInt(document.getElementById('pStock').value, 10),
+    category: document.getElementById('pCategory').value.trim() || 'General',
+    image: document.getElementById('pImage').value.trim() || 'https://picsum.photos/400/300'
+  };
+
+  try {
+    if (id) {
+      await apiFetch(`/products/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      msgBox.innerHTML = `<div class="form-msg success">Product updated.</div>`;
+    } else {
+      await apiFetch('/products', { method: 'POST', body: JSON.stringify(payload) });
+      msgBox.innerHTML = `<div class="form-msg success">Product added.</div>`;
+    }
+    resetForm();
+    loadProducts();
+  } catch (err) {
+    msgBox.innerHTML = `<div class="form-msg error">${escapeHtml(err.message)}</div>`;
+  }
+});
+
+async function deleteProduct(id) {
+  if (!confirm('Delete this product?')) return;
+  try {
+    await apiFetch(`/products/${id}`, { method: 'DELETE' });
+    loadProducts();
+  } catch (e) { alert(e.message); }
+}
+
+// ---------- ORDERS ----------
+async function loadOrders() {
+  const tbody = document.getElementById('orderTableBody');
+  try {
+    const orders = await apiFetch('/orders/all');
+    tbody.innerHTML = orders.map(o => `
+      <tr>
+        <td>#${o.id}</td>
+        <td>${escapeHtml(o.customer_name)}<br><span style="color:var(--ink-soft); font-size:12px;">${escapeHtml(o.customer_email)}</span></td>
+        <td>${formatPrice(o.total)}</td>
+        <td><span class="status-badge">${escapeHtml(o.status)}</span></td>
+        <td>${new Date(o.created_at).toLocaleDateString()}</td>
+        <td>
+          <select onchange="updateStatus(${o.id}, this.value)">
+            ${['placed','processing','shipped','delivered','cancelled'].map(s => `<option value="${s}" ${s === o.status ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+        </td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6">Failed to load orders.</td></tr>`;
+  }
+}
+
+async function updateStatus(orderId, status) {
+  try {
+    await apiFetch(`/orders/${orderId}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+  } catch (e) { alert(e.message); }
+}
+
+loadProducts();
+</script>
+</body>
+</html>
