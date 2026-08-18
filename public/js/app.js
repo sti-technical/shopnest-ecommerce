@@ -1,99 +1,97 @@
-// app.js - shared helpers used across all pages
-
+// ---------- API helper ----------
 const API = '/api';
 
-function getToken() {
-  return localStorage.getItem('token');
-}
+function getToken() { return localStorage.getItem('token'); }
 function getUser() {
   const u = localStorage.getItem('user');
   return u ? JSON.parse(u) : null;
 }
-function logout() {
+function setSession(token, user) {
+  localStorage.setItem('token', token);
+  localStorage.setItem('user', JSON.stringify(user));
+}
+function clearSession() {
   localStorage.removeItem('token');
   localStorage.removeItem('user');
-  window.location.href = 'index.html';
 }
-function authHeaders() {
-  const token = getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+function isLoggedIn() { return !!getToken(); }
+function isAdmin() { const u = getUser(); return u && u.role === 'admin'; }
 
-async function apiFetch(path, options = {}) {
-  const res = await fetch(API + path, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders(),
-      ...(options.headers || {})
-    }
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Something went wrong.');
+async function api(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  const token = getToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${API}${path}`, { ...options, headers });
+  let data = null;
+  try { data = await res.json(); } catch (e) { /* no body */ }
+  if (!res.ok) {
+    throw new Error((data && data.error) || `Request failed (${res.status})`);
+  }
   return data;
 }
 
-// ---------- NAVBAR RENDER ----------
-function renderNavbar(activePage) {
+function money(n) { return `₹${Number(n).toFixed(2)}`; }
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ---------- Navbar ----------
+async function renderNavbar() {
+  const el = document.getElementById('navbar');
+  if (!el) return;
   const user = getUser();
-  const navEl = document.getElementById('navbar');
-  if (!navEl) return;
+  let cartCount = 0;
+  if (isLoggedIn()) {
+    try {
+      const cart = await api('/cart');
+      cartCount = cart.reduce((s, i) => s + i.quantity, 0);
+    } catch (e) { /* ignore */ }
+  }
 
-  const cartCount = window.__cartCount || 0;
-
-  navEl.innerHTML = `
-    <div class="container">
-      <a href="index.html" class="brand"><span class="brand-mark">SN</span> ShopNest</a>
-      <div class="nav-links">
-        <a href="index.html" class="${activePage === 'home' ? 'active' : ''}">Home</a>
-        ${user ? `<a href="cart.html" class="${activePage === 'cart' ? 'active' : ''}">Cart <span class="cart-badge" id="navCartBadge">${cartCount}</span></a>` : ''}
-        ${user ? `<a href="orders.html" class="${activePage === 'orders' ? 'active' : ''}">My Orders</a>` : ''}
-        ${user && user.role === 'admin' ? `<a href="admin.html" class="${activePage === 'admin' ? 'active' : ''}">Admin</a>` : ''}
-        ${user
-          ? `<span style="color:var(--ink-soft)">Hi, ${user.name.split(' ')[0]}</span><button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>`
-          : `<a href="login.html" class="btn btn-outline btn-sm">Login</a><a href="register.html" class="btn btn-primary btn-sm">Sign Up</a>`}
-      </div>
+  el.innerHTML = `
+    <a href="/index.html" class="brand">Shop<span>Nest</span></a>
+    <div class="nav-links">
+      <a href="/index.html">Home</a>
+      ${isLoggedIn() ? `
+        <a href="/cart.html">Cart${cartCount ? `<span class="badge">${cartCount}</span>` : ''}</a>
+        <a href="/orders.html">My Orders</a>
+        ${isAdmin() ? '<a href="/admin.html">Admin</a>' : ''}
+        <span style="color:#6b6b6b;font-size:0.9rem;">Hi, ${escapeHtml(user.name)}</span>
+        <button id="logoutBtn">Logout</button>
+      ` : `
+        <a href="/login.html">Login</a>
+        <a href="/register.html" class="btn btn-sm">Register</a>
+      `}
     </div>
   `;
 
-  if (user) refreshCartCount();
-}
-
-async function refreshCartCount() {
-  try {
-    const data = await apiFetch('/cart');
-    const count = data.items.reduce((s, i) => s + i.quantity, 0);
-    window.__cartCount = count;
-    const badge = document.getElementById('navCartBadge');
-    if (badge) badge.textContent = count;
-  } catch (e) {
-    // not logged in or error - ignore
+  const logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', () => {
+      clearSession();
+      window.location.href = '/index.html';
+    });
   }
 }
 
-function requireLogin(redirectTo = 'login.html') {
-  if (!getToken()) {
-    window.location.href = redirectTo;
+function requireLogin() {
+  if (!isLoggedIn()) {
+    window.location.href = '/login.html';
     return false;
   }
   return true;
 }
 
 function requireAdmin() {
-  const user = getUser();
-  if (!user || user.role !== 'admin') {
-    window.location.href = 'index.html';
+  if (!isLoggedIn() || !isAdmin()) {
+    window.location.href = '/index.html';
     return false;
   }
   return true;
 }
 
-function formatPrice(n) {
-  return '₹' + Number(n).toLocaleString('en-IN');
-}
-
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str ?? '';
-  return div.innerHTML;
-}
+document.addEventListener('DOMContentLoaded', renderNavbar);
