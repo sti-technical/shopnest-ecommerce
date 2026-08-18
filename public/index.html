@@ -3,115 +3,133 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ShopNest — Shop Smart, Live Better</title>
-<link rel="stylesheet" href="css/style.css">
+<title>ShopNest — Shop Smart</title>
+<link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-
 <nav class="navbar" id="navbar"></nav>
 
-<section class="hero">
-  <div class="container">
-    <h1>Everything you need, delivered to your door.</h1>
-    <p>Browse handpicked electronics, footwear, home essentials and more — all in one place.</p>
-    <div class="search-bar">
-      <input type="text" id="searchInput" placeholder="Search for products...">
-      <button class="btn btn-primary" onclick="doSearch()">Search</button>
-    </div>
-  </div>
-</section>
+<div class="hero">
+  <h1>Welcome to ShopNest</h1>
+  <p>Everyday essentials, delivered with care.</p>
+</div>
 
 <div class="container">
-  <div class="chips" id="categoryChips"></div>
-  <h2 class="section-title">Products</h2>
-  <div class="grid" id="productGrid">
-    <p style="color:var(--ink-soft)">Loading products...</p>
+  <div class="filters">
+    <input type="text" id="searchInput" placeholder="Search products...">
+    <select id="categorySelect">
+      <option value="">All Categories</option>
+    </select>
+  </div>
+
+  <div id="alertBox"></div>
+  <div class="product-grid" id="productGrid">
+    <p>Loading products...</p>
   </div>
 </div>
 
-<footer>Built as a college mini-project — ShopNest &copy; 2026</footer>
+<footer>&copy; 2026 ShopNest. College mini-project.</footer>
 
-<script src="js/app.js"></script>
+<script src="/js/app.js"></script>
 <script>
-let activeCategory = '';
+let allCategories = [];
 
 async function loadCategories() {
   try {
-    const cats = await apiFetch('/products/categories');
-    const el = document.getElementById('categoryChips');
-    el.innerHTML = `<div class="chip active" data-cat="" onclick="filterCategory('')">All</div>` +
-      cats.map(c => `<div class="chip" data-cat="${escapeHtml(c)}" onclick="filterCategory('${escapeHtml(c)}')">${escapeHtml(c)}</div>`).join('');
-  } catch (e) { console.error(e); }
+    allCategories = await api('/products/categories');
+    const sel = document.getElementById('categorySelect');
+    allCategories.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c; opt.textContent = c;
+      sel.appendChild(opt);
+    });
+  } catch (e) { /* ignore */ }
 }
 
-function filterCategory(cat) {
-  activeCategory = cat;
-  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.cat === cat));
-  loadProducts();
+function showAlert(msg, type = 'success') {
+  const box = document.getElementById('alertBox');
+  box.innerHTML = `<div class="alert alert-${type}">${escapeHtml(msg)}</div>`;
+  setTimeout(() => { box.innerHTML = ''; }, 2500);
 }
-
-function doSearch() {
-  loadProducts();
-}
-
-document.getElementById('searchInput')?.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') doSearch();
-});
 
 async function loadProducts() {
   const grid = document.getElementById('productGrid');
-  grid.innerHTML = `<p style="color:var(--ink-soft)">Loading products...</p>`;
-  try {
-    const search = document.getElementById('searchInput').value.trim();
-    const params = new URLSearchParams();
-    if (search) params.set('search', search);
-    if (activeCategory) params.set('category', activeCategory);
+  const search = document.getElementById('searchInput').value.trim();
+  const category = document.getElementById('categorySelect').value;
+  const params = new URLSearchParams();
+  if (search) params.set('search', search);
+  if (category) params.set('category', category);
 
-    const products = await apiFetch('/products?' + params.toString());
+  try {
+    const products = await api(`/products?${params.toString()}`);
     if (products.length === 0) {
-      grid.innerHTML = `<div class="empty-state">No products found.</div>`;
+      grid.innerHTML = '<div class="empty-state">No products found.</div>';
       return;
     }
     grid.innerHTML = products.map(p => `
-      <div class="card">
-        <img src="${p.image}" alt="${escapeHtml(p.name)}" loading="lazy">
-        <div class="card-body">
-          <span class="card-category">${escapeHtml(p.category)}</span>
-          <h3 class="card-title">${escapeHtml(p.name)}</h3>
-          <p class="card-desc">${escapeHtml(p.description)}</p>
-          <div class="card-footer">
-            <span class="price">${formatPrice(p.price)}</span>
-            ${p.stock <= 5 ? `<span class="stock-low">${p.stock === 0 ? 'Out of stock' : 'Only ' + p.stock + ' left'}</span>` : ''}
+      <div class="product-card">
+        <img src="${escapeHtml(p.image)}" alt="${escapeHtml(p.name)}" onerror="this.src='https://via.placeholder.com/300x200?text=ShopNest'">
+        <div class="info">
+          <span class="cat">${escapeHtml(p.category)}</span>
+          <h3>${escapeHtml(p.name)}</h3>
+          <p class="desc">${escapeHtml(p.description)}</p>
+          <div class="price-row">
+            <span class="price">${money(p.price)}</span>
+            <span class="stock ${p.stock <= 5 ? 'low' : ''}">${p.stock > 0 ? p.stock + ' in stock' : 'Out of stock'}</span>
           </div>
-          <button class="btn btn-primary btn-block" ${p.stock === 0 ? 'disabled' : ''} onclick="addToCart(${p.id}, this)">
-            ${p.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
-          </button>
+          <div class="card-actions">
+            <button class="btn btn-outline" ${p.stock <= 0 ? 'disabled' : ''} onclick="addToCart(${p.id})">
+              ${p.stock <= 0 ? 'Out of Stock' : 'Add to Cart'}
+            </button>
+            <button class="btn" ${p.stock <= 0 ? 'disabled' : ''} onclick="buyNow(${p.id})">
+              Buy Now
+            </button>
+          </div>
         </div>
       </div>
     `).join('');
   } catch (e) {
-    grid.innerHTML = `<p class="form-msg error">Failed to load products.</p>`;
+    grid.innerHTML = `<div class="empty-state">Failed to load products: ${escapeHtml(e.message)}</div>`;
   }
 }
 
-async function addToCart(productId, btn) {
-  if (!getToken()) { window.location.href = 'login.html'; return; }
-  btn.disabled = true;
-  const original = btn.textContent;
-  btn.textContent = 'Adding...';
+async function addToCart(productId) {
+  if (!isLoggedIn()) {
+    window.location.href = '/login.html';
+    return;
+  }
   try {
-    await apiFetch('/cart', { method: 'POST', body: JSON.stringify({ product_id: productId, quantity: 1 }) });
-    btn.textContent = 'Added ✓';
-    refreshCartCount();
-    setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1200);
+    await api('/cart', { method: 'POST', body: JSON.stringify({ product_id: productId, quantity: 1 }) });
+    showAlert('Added to cart!');
+    renderNavbar();
   } catch (e) {
-    alert(e.message);
-    btn.textContent = original;
-    btn.disabled = false;
+    showAlert(e.message, 'error');
   }
 }
 
-renderNavbar('home');
+async function buyNow(productId) {
+  if (!isLoggedIn()) {
+    window.location.href = '/login.html';
+    return;
+  }
+  try {
+    // Orders just this one item directly — does not touch the cart
+    const order = await api('/orders/buy-now', { method: 'POST', body: JSON.stringify({ product_id: productId, quantity: 1 }) });
+    showAlert(`Order #${order.id} placed successfully!`);
+    setTimeout(() => { window.location.href = '/orders.html'; }, 1200);
+  } catch (e) {
+    showAlert(e.message, 'error');
+  }
+}
+
+document.getElementById('searchInput').addEventListener('input', debounce(loadProducts, 300));
+document.getElementById('categorySelect').addEventListener('change', loadProducts);
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
 loadCategories();
 loadProducts();
 </script>
